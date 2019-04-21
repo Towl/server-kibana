@@ -1,0 +1,82 @@
+version: "3.6"
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.0.0
+    container_name: elasticsearch
+    environment:
+      - cluster.name=core-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    labels:
+      - "traefik.docker.network=server"
+      - "traefik.frontend.rule=Host:elastic.towl.fr"
+      - "traefik.port=9200"
+      - "traefik.backend.healthcheck.path=/"
+    volumes:
+      - elastic_data:/usr/share/elasticsearch/data
+    networks:
+      kibana:
+        aliases:
+          - "elastic"
+      server:
+        aliases:
+          - "www.elastic.towl.fr"
+          - "elastic.towl.fr"
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.0.0
+    container_name: kibana
+    environment:
+      SERVER_NAME: "kibana.towl.fr"
+      ELASTICSEARCH_HOSTS: "http://elastic.towl.fr:9200/"
+      XPACK_MONITORING_ENABLED: "true"
+    labels:
+      - "traefik.docker.network=server"
+      - "traefik.frontend.rule=Host:kibana.towl.fr"
+      - "traefik.port=5601"
+    networks:
+      kibana:
+        aliases:
+          - "kibana"
+      server:
+        aliases:
+          - "kibana.towl.fr"
+          - "www.kibana.towl.fr"
+      kibana:
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.0.0
+    container_name: logstash
+    networks:
+      kibana:
+        aliases:
+          - "logstash"
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:7.0.0
+    container_name: metricbeat
+    user: root
+    environment:
+      - 'output.elasticsearch.hosts=["elasticsearch:9200"]'
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./conf/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro"
+      - "/sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro"
+      - "/proc:/hostfs/proc:ro"
+      - "/:/hostfs:ro"
+    networks:
+      kibana:
+      server:
+
+volumes:
+  elastic_data:
+    driver: local
+
+networks:
+  kibana:
+    external: true
+  server:
+    external: true
